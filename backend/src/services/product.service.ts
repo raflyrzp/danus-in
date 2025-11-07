@@ -1,6 +1,21 @@
 import pool from "../config/db.js";
+import type { Product } from "../types/entities.js";
+import { AppError } from "../utils/errors.js";
 
-export async function createProduct(sellerId, data) {
+interface CreateProductInput {
+  name: string;
+  description?: string;
+  price: number;
+  image_url?: string;
+  po_open_date: string;
+  po_close_date: string;
+  delivery_date: string;
+}
+
+export async function createProduct(
+  sellerId: number,
+  data: CreateProductInput
+) {
   const {
     name,
     description,
@@ -10,34 +25,40 @@ export async function createProduct(sellerId, data) {
     po_close_date,
     delivery_date,
   } = data;
+
   const [result] = await pool.query(
     `INSERT INTO products (seller_id, name, description, price, image_url, po_open_date, po_close_date, delivery_date)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       sellerId,
       name,
-      description,
+      description ?? null,
       price,
-      image_url,
+      image_url ?? null,
       po_open_date,
       po_close_date,
       delivery_date,
     ]
   );
-  return { id: result.insertId };
+  return { id: (result as any).insertId };
 }
 
-export async function updateProduct(sellerId, productId, data) {
+export async function updateProduct(
+  sellerId: number,
+  productId: number | string,
+  data: Partial<Product>
+) {
   const [rows] = await pool.query(
     "SELECT id, seller_id FROM products WHERE id = ?",
     [productId]
   );
-  if (!rows.length) throw new Error("Produk tidak ditemukan");
-  if (rows[0].seller_id !== sellerId)
-    throw new Error("Tidak boleh mengubah produk orang lain");
+  const arr = rows as any[];
+  if (!arr.length) throw new AppError("Produk tidak ditemukan", 404);
+  if (arr[0].seller_id !== sellerId)
+    throw new AppError("Tidak boleh mengubah produk orang lain", 403);
 
-  const fields = [];
-  const values = [];
+  const fields: string[] = [];
+  const values: any[] = [];
   Object.entries(data).forEach(([k, v]) => {
     if (v !== undefined) {
       fields.push(`${k}=?`);
@@ -53,19 +74,23 @@ export async function updateProduct(sellerId, productId, data) {
   return { message: "Berhasil update" };
 }
 
-export async function deleteProduct(sellerId, productId) {
+export async function deleteProduct(
+  sellerId: number,
+  productId: number | string
+) {
   const [rows] = await pool.query(
     "SELECT seller_id FROM products WHERE id = ?",
     [productId]
   );
-  if (!rows.length) throw new Error("Produk tidak ditemukan");
-  if (rows[0].seller_id !== sellerId)
-    throw new Error("Tidak boleh menghapus produk orang lain");
+  const arr = rows as any[];
+  if (!arr.length) throw new AppError("Produk tidak ditemukan", 404);
+  if (arr[0].seller_id !== sellerId)
+    throw new AppError("Tidak boleh menghapus produk orang lain", 403);
   await pool.query("DELETE FROM products WHERE id = ?", [productId]);
   return { message: "Berhasil hapus" };
 }
 
-export async function getProduct(productId) {
+export async function getProduct(productId: number | string) {
   const [rows] = await pool.query(
     `SELECT p.*, u.name as seller_name
      FROM products p
@@ -73,13 +98,22 @@ export async function getProduct(productId) {
      WHERE p.id = ?`,
     [productId]
   );
-  if (!rows.length) throw new Error("Produk tidak ditemukan");
-  return rows[0];
+  const arr = rows as any[];
+  if (!arr.length) throw new AppError("Produk tidak ditemukan", 404);
+  return arr[0];
 }
 
-export async function listProducts({ q, min_price, max_price, open_only }) {
-  const conditions = [];
-  const params = [];
+interface ListProductsFilter {
+  q?: string;
+  min_price?: string;
+  max_price?: string;
+  open_only?: string;
+}
+
+export async function listProducts(filter: ListProductsFilter) {
+  const { q, min_price, max_price, open_only } = filter;
+  const conditions: string[] = [];
+  const params: any[] = [];
 
   if (q) {
     conditions.push("(p.name LIKE ? OR p.description LIKE ?)");
@@ -87,11 +121,11 @@ export async function listProducts({ q, min_price, max_price, open_only }) {
   }
   if (min_price) {
     conditions.push("p.price >= ?");
-    params.push(min_price);
+    params.push(Number(min_price));
   }
   if (max_price) {
     conditions.push("p.price <= ?");
-    params.push(max_price);
+    params.push(Number(max_price));
   }
   if (open_only === "true") {
     conditions.push("CURDATE() BETWEEN p.po_open_date AND p.po_close_date");
@@ -110,7 +144,7 @@ export async function listProducts({ q, min_price, max_price, open_only }) {
   return rows;
 }
 
-export async function listSellerProducts(sellerId) {
+export async function listSellerProducts(sellerId: number) {
   const [rows] = await pool.query(
     `SELECT id, name, price, po_open_date, po_close_date, delivery_date, created_at
      FROM products WHERE seller_id = ? ORDER BY created_at DESC`,
