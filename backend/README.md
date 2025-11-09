@@ -1,6 +1,4 @@
-# Danus.in API (Express 5 + TypeScript + MySQL + Zod v4)
-
-API marketplace untuk danusan kampus dengan fitur Pre-Order (PO), role Buyer/Seller, manajemen produk, pesanan, notifikasi, validasi ketat dengan Zod v4, dan keamanan dasar menggunakan Helmet.
+# Danus.in API
 
 ## Spesifikasi Teknis
 
